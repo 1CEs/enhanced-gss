@@ -1,0 +1,189 @@
+//@version=5
+strategy("Enhanced Gold Swing Strategy", overlay=true, default_qty_type=strategy.percent_of_equity, default_qty_value=1)
+
+// =============================================
+// Strategy Configuration
+// =============================================
+
+// --- General Settings --- //
+var color colorBull = color.new(#4CAF50, 0)  // Green
+var color colorBear = color.new(#FF5252, 0)  // Red
+var color colorNeutral = color.new(#FFD700, 30) // Gold
+
+// --- Input Groups --- //
+groupEMA = "EMA Settings"
+groupRSI = "RSI Settings"
+groupSwings = "Swing Points Settings"
+groupTrade = "Trade Settings"
+groupVisual = "Visual Settings"
+
+// --- EMA Settings --- //
+emaShortLength = input.int(50, title="Short EMA Length", group=groupEMA, tooltip="Length of the short-term EMA")
+emaLongLength = input.int(200, title="Long EMA Length", group=groupEMA, tooltip="Length of the long-term EMA")
+showEMARibbon = input.bool(true, title="Show EMA Ribbon", group=groupVisual)
+
+// --- RSI Settings --- //
+rsiPeriod = input.int(14, title="RSI Period", group=groupRSI)
+rsiOverbought = input.int(70, title="RSI Overbought Level", group=groupRSI)
+rsiOversold = input.int(30, title="RSI Oversold Level", group=groupRSI)
+rsiMiddle = input.int(50, title="RSI Middle Level", group=groupRSI)
+showRSISignals = input.bool(true, title="Show RSI Signals on Chart", group=groupVisual)
+
+// --- Swing Settings --- //
+swingPeriod = input.int(10, title="Swing High/Low Period", group=groupSwings)
+showSwingLevels = input.bool(true, title="Show Swing Levels", group=groupVisual)
+
+// --- Trade Settings --- //
+rrRatio = input.float(1.5, title="Risk-Reward Ratio", step=0.1, group=groupTrade, tooltip="Target profit will be this multiple of the risk")
+trailStop = input.bool(false, title="Use Trailing Stop", group=groupTrade)
+trailPct = input.float(1.0, title="Trailing Stop (%)", step=0.1, group=groupTrade)
+enableAlerts = input.bool(true, title="Enable Alerts", group=groupTrade)
+
+// =============================================
+// Indicator Calculations
+// =============================================
+
+// --- EMA Calculations --- //
+emaShort = ta.ema(close, emaShortLength)
+emaLong = ta.ema(close, emaLongLength)
+
+// Add intermediate EMAs for ribbon effect if enabled
+ema75 = ta.ema(close, 75)
+ema100 = ta.ema(close, 100)
+ema150 = ta.ema(close, 150)
+
+// --- RSI Calculation --- //
+rsi = ta.rsi(close, rsiPeriod)
+
+// --- Trend Determination --- //
+uptrend = close > emaShort and emaShort > emaLong
+downtrend = close < emaShort and emaShort < emaLong
+sideways = not uptrend and not downtrend
+
+// --- RSI Signal Conditions --- //
+rsiBullish = ta.crossover(rsi, rsiMiddle)
+rsiBearish = ta.crossunder(rsi, rsiMiddle)
+rsiOverboughtExit = ta.crossunder(rsi, rsiOverbought)
+rsiOversoldExit = ta.crossover(rsi, rsiOversold)
+
+// --- Entry Conditions --- //
+longCondition = uptrend and rsiBullish
+shortCondition = downtrend and rsiBearish
+
+// --- Swing High/Low Calculations --- //
+swingLow = ta.lowest(low, swingPeriod)
+swingHigh = ta.highest(high, swingPeriod)
+
+// --- Stop Loss & Take Profit Calculations --- //
+// Dynamic stop loss based on swing points
+longSL = swingLow
+shortSL = swingHigh
+
+// Calculate risk in points
+longRisk = close - longSL
+shortRisk = shortSL - close
+
+// Calculate take profit based on risk-reward ratio
+longTP = close + (longRisk * rrRatio)
+shortTP = close - (shortRisk * rrRatio)
+
+// =============================================
+// Strategy Execution
+// =============================================
+
+// --- Entry Signals --- //
+if (longCondition)
+    strategy.entry("Long", strategy.long)
+    
+    if (trailStop)
+        strategy.exit("Trail Long", from_entry="Long", trail_points=close * trailPct / 100, trail_offset=0)
+    else
+        strategy.exit("TP/SL Long", from_entry="Long", stop=longSL, limit=longTP)
+    
+    if (enableAlerts)
+        alert("BUY Signal: Gold Swing Strategy", alert.freq_once_per_bar_close)
+
+if (shortCondition)
+    strategy.entry("Short", strategy.short)
+    
+    if (trailStop)
+        strategy.exit("Trail Short", from_entry="Short", trail_points=close * trailPct / 100, trail_offset=0)
+    else
+        strategy.exit("TP/SL Short", from_entry="Short", stop=shortSL, limit=shortTP)
+    
+    if (enableAlerts)
+        alert("SELL Signal: Gold Swing Strategy", alert.freq_once_per_bar_close)
+
+// Optional: Add take profit signals on extreme RSI values
+if (strategy.position_size > 0 and rsiOverboughtExit)
+    strategy.close("Long", comment="RSI Overbought Exit")
+    
+if (strategy.position_size < 0 and rsiOversoldExit)
+    strategy.close("Short", comment="RSI Oversold Exit")
+
+// =============================================
+// Visual Elements
+// =============================================
+
+// --- EMA Plots --- //
+plot(emaShort, color=color.new(#FF9800, 0), title="EMA Short", linewidth=2)
+plot(emaLong, color=color.new(#2196F3, 0), title="EMA Long", linewidth=2)
+
+// Optional EMA Ribbon
+plot(showEMARibbon ? ema75 : na, color=color.new(#FFEB3B, 70), title="EMA 75")
+plot(showEMARibbon ? ema100 : na, color=color.new(#FF9800, 70), title="EMA 100")
+plot(showEMARibbon ? ema150 : na, color=color.new(#2196F3, 70), title="EMA 150")
+
+
+// --- Swing Level Plots --- //
+plot(showSwingLevels ? swingLow : na, color=color.new(colorBull, 50), style=plot.style_circles, linewidth=1, title="Swing Low")
+plot(showSwingLevels ? swingHigh : na, color=color.new(colorBear, 50), style=plot.style_circles, linewidth=1, title="Swing High")
+
+// --- Chart Background Color based on Trend --- //
+bgcolor(uptrend ? color.new(colorBull, 95) : downtrend ? color.new(colorBear, 95) : color.new(colorNeutral, 95), title="Trend Background")
+
+// --- Entry/Exit Signal Visualization --- //
+// Buy signals with SL/TP levels
+plotshape(longCondition, title="Buy Signal", location=location.belowbar, color=colorBull, style=shape.labelup, text="BUY", textcolor=color.white, size=size.normal)
+plotshape(shortCondition, title="Sell Signal", location=location.abovebar, color=colorBear, style=shape.labeldown, text="SELL", textcolor=color.white, size=size.normal)
+
+// Display SL/TP levels when a new position is opened
+if (longCondition and showSwingLevels)
+    label.new(bar_index, longSL, text="SL", color=color.new(colorBear, 10), style=label.style_label_up, textcolor=color.white, size=size.small)
+    label.new(bar_index, longTP, text="TP", color=color.new(colorBull, 10), style=label.style_label_down, textcolor=color.white, size=size.small)
+
+if (shortCondition and showSwingLevels)
+    label.new(bar_index, shortSL, text="SL", color=color.new(colorBull, 10), style=label.style_label_down, textcolor=color.white, size=size.small)
+    label.new(bar_index, shortTP, text="TP", color=color.new(colorBear, 10), style=label.style_label_up, textcolor=color.white, size=size.small)
+
+// --- RSI Signal Indicators --- //
+plotshape(showRSISignals and rsiBullish, title="RSI Bullish Cross", location=location.bottom, color=colorBull, style=shape.circle, size=size.tiny)
+plotshape(showRSISignals and rsiBearish, title="RSI Bearish Cross", location=location.bottom, color=colorBear, style=shape.circle, size=size.tiny)
+
+// =============================================
+// Strategy Stats Table
+// =============================================
+// Current position info
+var positionColor = uptrend ? colorBull : downtrend ? colorBear : colorNeutral
+var table infoTable = table.new(position.top_right, 2, 5, border_width=1)
+
+if (barstate.islast)
+    table.cell(infoTable, 0, 0, "GOLD SWING STRATEGY", text_color=color.white, bgcolor=color.new(#212121, 10))
+    table.cell(infoTable, 1, 0, "", bgcolor=color.new(#212121, 10))
+    
+    table.cell(infoTable, 0, 1, "Trend", text_color=color.white)
+    table.cell(infoTable, 1, 1, uptrend ? "BULLISH" : downtrend ? "BEARISH" : "NEUTRAL", 
+               text_color=color.white, bgcolor=positionColor)
+    
+    table.cell(infoTable, 0, 2, "RSI", text_color=color.white)
+    table.cell(infoTable, 1, 2, str.tostring(math.round(rsi, 2)), 
+               text_color=rsi > 50 ? colorBull : colorBear)
+    
+    table.cell(infoTable, 0, 3, "EMA Cross", text_color=color.white)
+    table.cell(infoTable, 1, 3, emaShort > emaLong ? "BULLISH" : "BEARISH", 
+               text_color=emaShort > emaLong ? colorBull : colorBear)
+    
+    table.cell(infoTable, 0, 4, "Signal", text_color=color.white)
+    table.cell(infoTable, 1, 4, longCondition ? "BUY" : shortCondition ? "SELL" : "WAIT", 
+               bgcolor=longCondition ? colorBull : shortCondition ? colorBear : color.new(colorNeutral, 10),
+               text_color=color.white)
