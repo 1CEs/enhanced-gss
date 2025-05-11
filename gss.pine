@@ -1,5 +1,5 @@
-//@version=5
-strategy("Enhanced Gold Swing Strategy", overlay=true, default_qty_type=strategy.percent_of_equity, default_qty_value=1)
+//@version=6
+strategy("Enhanced Gold Swing Strategy", overlay=true, default_qty_type=strategy.fixed, default_qty_value=1)
 
 // =============================================
 // Strategy Configuration
@@ -34,7 +34,7 @@ swingPeriod = input.int(10, title="Swing High/Low Period", group=groupSwings)
 showSwingLevels = input.bool(true, title="Show Swing Levels", group=groupVisual)
 
 // --- Trade Settings --- //
-rrRatio = input.float(1.5, title="Risk-Reward Ratio", step=0.1, group=groupTrade, tooltip="Target profit will be this multiple of the risk")
+rrRatio = input.float(0.25, title="Risk-Reward Ratio", step=0.1, group=groupTrade, tooltip="Target profit will be this multiple of the risk")
 trailStop = input.bool(false, title="Use Trailing Stop", group=groupTrade)
 trailPct = input.float(1.0, title="Trailing Stop (%)", step=0.1, group=groupTrade)
 enableAlerts = input.bool(true, title="Enable Alerts", group=groupTrade)
@@ -97,8 +97,6 @@ if (longCondition)
     
     if (trailStop)
         strategy.exit("Trail Long", from_entry="Long", trail_points=close * trailPct / 100, trail_offset=0)
-    else
-        strategy.exit("TP/SL Long", from_entry="Long", stop=longSL, limit=longTP)
     
     if (enableAlerts)
         alert("BUY Signal: Gold Swing Strategy", alert.freq_once_per_bar_close)
@@ -108,8 +106,6 @@ if (shortCondition)
     
     if (trailStop)
         strategy.exit("Trail Short", from_entry="Short", trail_points=close * trailPct / 100, trail_offset=0)
-    else
-        strategy.exit("TP/SL Short", from_entry="Short", stop=shortSL, limit=shortTP)
     
     if (enableAlerts)
         alert("SELL Signal: Gold Swing Strategy", alert.freq_once_per_bar_close)
